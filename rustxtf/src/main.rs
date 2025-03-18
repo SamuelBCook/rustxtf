@@ -199,7 +199,7 @@ fn main() {
     let file_chan_header_length = 1024;
 
     // Iterate over FileHeaders
-    let file_headers_map = read_headers(xtf_file_headers, &data, 0);
+    let (file_headers_map, final_byte) = read_headers(xtf_file_headers, &data, 0);
 
     for (key, value) in &file_headers_map {
         match value {
@@ -207,6 +207,8 @@ fn main() {
             None => println!("Key: {}, Value: None", key),
         }
     }
+
+    println!("Final byte: {}", final_byte);
 
     // Iterate over ChanHeaders - change to get number of channels from file_headers and iterate over
     //read_headers(xtf_chan_info, &data, file_header_length); // first chan
@@ -311,7 +313,7 @@ fn read_headers(
     file_header: Vec<(&str, &str, usize)>, 
     data: &Vec<u8>, 
     base_offset: usize
-) -> HashMap<String, Option<Box<dyn std::fmt::Debug>>> {
+) -> (HashMap<String, Option<Box<dyn std::fmt::Debug>>>, usize) {
 
     let mut final_byte = base_offset;
     let mut result_map: HashMap<String, Option<Box<dyn std::fmt::Debug>>> = HashMap::new();
@@ -324,7 +326,7 @@ fn read_headers(
 
         // if fmt is char, split into number and type 
         let mut number = 0;
-        if fmt.contains("s") {
+        if fmt.contains("s") {  //|| fmt.contains("b") 
             let (parsed_number, char_type) = match parse_size_and_type(fmt) {
                 Ok((number, char_type)) => {
                     println!("Captured: Number = {}, Char = {}", number, char_type);
@@ -332,7 +334,7 @@ fn read_headers(
                 }
                 Err(e) => {
                     eprintln!("Error: {}", e);
-                    return result_map; // Early return if there's an error
+                    return (result_map, final_byte); // Early return if there's an error //TODO: change to raise error
                 }
             };
         
@@ -412,7 +414,7 @@ fn read_headers(
     }
 
     println!("\nFinal byte {}", final_byte);
-    result_map // Return the map
+    (result_map, final_byte) // Return the map
 }
 
 
@@ -552,4 +554,5 @@ fn parse_size_and_type(input: &str) -> Result<(usize, char), Box<dyn Error>> {
 }
 
 // Make it so can choose Endian-ness but defaults to littler
-// Return last byte from read function 
+// Deal with fmt like 12b
+// work out why num bytes is wrong
