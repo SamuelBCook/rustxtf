@@ -4,6 +4,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::Cursor;
 use std::error::Error;
 use regex::Regex;
+use std::collections::HashMap;
 
 fn main() {
 
@@ -45,7 +46,7 @@ fn main() {
         ("MRUOffsetRoll", "f", 252),
     ];
 
-    let xtf_chan_info: Vec<(&str, &str, i32)> = vec![
+    let xtf_chan_info: Vec<(&str, &str, usize)> = vec![
         ("TypeOfChannel", "B", 0),
         ("SubChannelNumber", "b", 1),
         ("CorrectionFlags", "H", 2),
@@ -69,7 +70,7 @@ fn main() {
         ("ReservedArea2", "53s", 75),
     ];
 
-    let xtf_ping_header: Vec<(&str, &str, i32)> = vec![
+    let xtf_ping_header: Vec<(&str, &str, usize)> = vec![
         ("MagicNumber", "H", 0),
         ("HeaderType", "b", 2),
         ("SubChannelNumber", "b", 3),
@@ -151,7 +152,7 @@ fn main() {
         ("ReservedSpace2", "6b", 250),
     ];
 
-    let xtf_ping_chan_header: Vec<(&str, &str, i32)> = vec![
+    let xtf_ping_chan_header: Vec<(&str, &str, usize)> = vec![
         ("ChannelNumber", "H", 0),
         ("DownsampleMethod", "H", 2),
         ("SlantRange", "f", 4),
@@ -192,13 +193,136 @@ fn main() {
         Err(e) => eprintln!("Error reading file: {}", e),
     }
 
+    // header starts and lengths
+    let file_header_length = 254;
+    let chan_header_length = 256; 
+    let file_chan_header_length = 1024;
+
     // Iterate over FileHeaders
+    let file_headers_map = read_headers(xtf_file_headers, &data, 0);
 
-    for (name, fmt, offset) in &xtf_file_headers {
-        println!("Name: {}, Fmt: {}, Offset: {}", name, fmt, offset);
+    for (key, value) in &file_headers_map {
+        match value {
+            Some(val) => println!("Key: {}, Value: {:?}", key, val),
+            None => println!("Key: {}, Value: None", key),
+        }
+    }
+
+    // Iterate over ChanHeaders - change to get number of channels from file_headers and iterate over
+    //read_headers(xtf_chan_info, &data, file_header_length); // first chan
+    //read_headers(xtf_chan_info, &data, file_header_length); // second chan
+
+    // start ping headers - iterate over func to read ping headers then ping channel headers
+    
+}
+
+// fn read_headers (file_header: Vec<(&str, &str, usize)>, data: &Vec<u8>, base_offset: usize){
+
+//     let mut final_byte = base_offset;
+
+//     for (name, fmt, offset) in &file_header {
+//         println!("Name: {}, Fmt: {}, Offset: {}", name, fmt, offset);
+
+//         let mut in_loop_fmt = fmt.to_string();
+//         let mut offset_plus_base = base_offset + offset;
+
+//         // if is char split into number and type 
+//         let mut number = 0;
+//         if fmt.contains("s") {
+//             let (parsed_number, char_type) = match parse_size_and_type(fmt) {
+//                 Ok((number, char_type)) => {
+//                     println!("Captured: Number = {}, Char = {}", number, char_type);
+//                     (number, char_type) // Return the values as a tuple
+//                 }
+//                 Err(e) => {
+//                     eprintln!("Error: {}", e);
+//                     return; // Early return to exit if there's an error
+//                 }
+//             };
+        
+//             // Update the outer number only if parsed_number is valid
+//             number = parsed_number; // Only update number here, it's already valid
+//             in_loop_fmt = char_type.to_string();
+//             //println!("\nParsed number: {}, Parsed string: {}", number, in_loop_fmt);
+//         }
+
+//     let result = match in_loop_fmt.as_str() {
+//         "b" => {
+//             let byte_value = match read_and_decode_byte_as_number_u8(&data, offset_plus_base) {
+//                 Ok(byte_value) => {
+//                     println!("Byte value: {}", byte_value); // Print the decoded byte value
+//                 }
+//                 Err(e) => {
+//                     eprintln!("Error: {}", e); // Print the error if the function returns an Err
+//                 }
+//             };
+//             Some(byte_value)
+//             },
+
+//         "f" => {
+//             let float_value = match read_float_from_binary_at_offset(&data, offset_plus_base) {
+//                 Ok(float_value) => {
+//                     println!("Float value: {}", float_value); // Print the decoded byte value
+//                 }
+//                 Err(e) => {
+//                     eprintln!("Error: {}", e); // Print the error if the function returns an Err
+//                 }
+//             };
+//             Some(float_value)
+//         },
+//         "s" => {
+//             let string_value = match read_and_decode_bytes_as_string(&data, offset_plus_base, number) {
+//                 Ok(string_value) => {
+//                     println!("String value: {}", string_value); // Print the decoded string value
+//                 }
+//                 Err(e) => {
+//                     eprintln!("Error: {}", e); // Print the error if the function returns an Err
+//                 }
+//             };
+//             Some(string_value) // Wrap the string_value in Some and return
+//         },
+//         "H" => {
+//             let short_value = match read_unsigned_short(&data, offset_plus_base) {
+//                 Ok(short_value) => {
+//                     println!("Short value: {}", short_value); // Print the decoded byte value
+//                 }
+//                 Err(e) => {
+//                     eprintln!("Error: {}", e); // Print the error if the function returns an Err
+//                 }
+//             };
+//             Some(short_value) 
+//         },
+
+//         _ => {
+//             println!("Unknown value type: {}", fmt);
+//             None
+//         },
+//     };
+
+//     final_byte += offset;
+//     }
+
+//     println!("\nFinal byte {}", final_byte);
+//     //(final_byte)
+// }
+
+
+fn read_headers(
+    file_header: Vec<(&str, &str, usize)>, 
+    data: &Vec<u8>, 
+    base_offset: usize
+) -> HashMap<String, Option<Box<dyn std::fmt::Debug>>> {
+
+    let mut final_byte = base_offset;
+    let mut result_map: HashMap<String, Option<Box<dyn std::fmt::Debug>>> = HashMap::new();
+
+    for (name, fmt, offset) in &file_header {
+       // println!("Name: {}, Fmt: {}, Offset: {}", name, fmt, offset);
+
         let mut in_loop_fmt = fmt.to_string();
+        let mut offset_plus_base = base_offset + offset;
 
-        // if is char split into number and type 
+        // if fmt is char, split into number and type 
         let mut number = 0;
         if fmt.contains("s") {
             let (parsed_number, char_type) = match parse_size_and_type(fmt) {
@@ -208,62 +332,70 @@ fn main() {
                 }
                 Err(e) => {
                     eprintln!("Error: {}", e);
-                    return; // Early return to exit if there's an error
+                    return result_map; // Early return if there's an error
                 }
             };
         
             // Update the outer number only if parsed_number is valid
             number = parsed_number; // Only update number here, it's already valid
             in_loop_fmt = char_type.to_string();
-            println!("\nParsed number: {}, Parsed string: {}", number, in_loop_fmt);
         }
-        println!("FMT AFTER IF STATEMENT {}",in_loop_fmt);
 
         let result = match in_loop_fmt.as_str() {
             "b" => {
-                let byte_value = match read_and_decode_byte_as_number_u8(&data, *offset) {
+                let byte_value = match read_and_decode_byte_as_number_u8(&data, offset_plus_base) {
                     Ok(byte_value) => {
-                        println!("Byte value: {}", byte_value); // Print the decoded byte value
+                        //println!("Byte value: {}", byte_value); // Print the decoded byte value
+                        Some(byte_value)
                     }
                     Err(e) => {
-                        eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        //eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        None
                     }
                 };
-                Some(byte_value)
-                },
+                byte_value.map(|v| Box::new(v) as Box<dyn std::fmt::Debug>)
+            },
 
             "f" => {
-                let float_value = match read_float_from_binary_at_offset(&data, *offset) {
+                let float_value = match read_float_from_binary_at_offset(&data, offset_plus_base) {
                     Ok(float_value) => {
-                        println!("Float value: {}", float_value); // Print the decoded byte value
+                        //println!("Float value: {}", float_value); // Print the decoded byte value
+                        Some(float_value)
                     }
                     Err(e) => {
-                        eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        //eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        None
                     }
                 };
-                Some(float_value)
+                float_value.map(|v| Box::new(v) as Box<dyn std::fmt::Debug>)
             },
+
             "s" => {
-                let string_value = match read_and_decode_bytes_as_string(&data, *offset, number) {
+                let string_value = match read_and_decode_bytes_as_string(&data, offset_plus_base, number) {
                     Ok(string_value) => {
-                        println!("String value: {}", string_value); // Print the decoded string value
+                        //println!("String value: {}", string_value); // Print the decoded string value
+                        Some(string_value)
                     }
                     Err(e) => {
-                        eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        //eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        None
                     }
                 };
-                Some(string_value) // Wrap the string_value in Some and return
+                string_value.map(|v| Box::new(v) as Box<dyn std::fmt::Debug>)
             },
+
             "H" => {
-                let short_value = match read_unsigned_short(&data, *offset) {
+                let short_value = match read_unsigned_short(&data, offset_plus_base) {
                     Ok(short_value) => {
-                        println!("Short value: {}", short_value); // Print the decoded byte value
+                        //println!("Short value: {}", short_value); // Print the decoded byte value
+                        Some(short_value)
                     }
                     Err(e) => {
-                        eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        //eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        None
                     }
                 };
-                Some(short_value) // Convert to f32 for consistency in return type
+                short_value.map(|v| Box::new(v) as Box<dyn std::fmt::Debug>)
             },
 
             _ => {
@@ -272,47 +404,17 @@ fn main() {
             },
         };
 
-        // Check and print the result
-        // match result {
-        //     Some(value) => println!("Decoded header {} value: {}", name, value),
-        //     None => eprintln!("Failed to decode the value"),
-        // }
+        // Insert the result into the map
+        result_map.insert(name.to_string(), result);
 
-        //Ok(())
-
+        // Update the final_byte after processing each header
+        final_byte += offset;
     }
 
-    // Match first value
-    // let mut offset = 0;
-    // match read_and_decode_byte_as_number_u8(&data, offset) {
-    //     Ok(decoded) => println!("Decoded byte at offset {}: {}", offset, decoded),
-    //     Err(e) => eprintln!("Error reading binary data: {}", e),
-    // }
-
-    // // Match first float
-    // let offset = 208;
-    // match read_float_from_binary_at_offset(&data, offset) {
-    //     Ok(value) => println!("Float at offset {}: {}", offset, value),
-    //     Err(e) => eprintln!("Error reading binary data: {}", e),
-    // }
-
-    // // Match first string
-    // let offset = 2;
-    // let mut num_bytes = 8;
-    // match read_and_decode_bytes_as_string(&data, offset, num_bytes) {
-    //     Ok(decoded) => println!("Decoded string: {}", decoded),
-    //     Err(e) => eprintln!("Error reading and decoding binary data: {}", e),
-    // }
-
-    // // Match first unsigned short (H)
-    // let offset = 34;
-    // match read_unsigned_short(&data, offset) {
-    //     Ok(decoded) => println!("Decoded unsigned short: {}", decoded),
-    //     Err(e) => eprintln!("Error reading binary data: {}", e),
-    // }
-
-
+    println!("\nFinal byte {}", final_byte);
+    result_map // Return the map
 }
+
 
 
 fn read_binary_data(filename: &str) -> io::Result<Vec<u8>> {
@@ -364,6 +466,7 @@ fn read_and_decode_byte_as_number_u8(data: &[u8], offset:usize) -> Result<u8, Bo
     Ok(byte)
 }
 
+
 fn read_and_decode_bytes_as_string(data: &[u8], offset: usize, num_bytes: usize) -> Result<String, Box<dyn std::error::Error>> {
     // Ensure the offset and the number of bytes to read are within bounds
     if offset + num_bytes > data.len() {
@@ -378,6 +481,10 @@ fn read_and_decode_bytes_as_string(data: &[u8], offset: usize, num_bytes: usize)
 
     // Read the specified number of bytes into the buffer
     cursor.read_exact(&mut buffer)?;
+
+    // Strip the padding bytes (assuming 0x00 is the padding byte)
+    buffer.retain(|&byte| byte != 0x00);
+
 
     // Attempt to decode the bytes as a UTF-8 string
     match String::from_utf8(buffer) {
@@ -444,10 +551,5 @@ fn parse_size_and_type(input: &str) -> Result<(usize, char), Box<dyn Error>> {
     }
 }
 
-// TODO: pass values out of match statement 
-// TODO: edit dtypes so that bytes that decode to nums and bytes which decode to chars are diff
-// PLAN: Create func to read each dtype, then create funcs to read each type 
-// of header (iterate through vect with match to decide which type of decode), then create
-// function to read all of it at once - do not need to call func in match as short code
-// TODO: add buffer to each to read exact amount?:
 // Make it so can choose Endian-ness but defaults to littler
+// Return last byte from read function 
