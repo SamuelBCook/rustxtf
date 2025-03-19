@@ -5,11 +5,13 @@ use std::io::Cursor;
 use std::error::Error;
 use regex::Regex;
 use std::collections::HashMap;
+use std::fmt::Debug;
 
 fn main() {
 
     // &str is string slice instead of string 
     // &str is immutable and more mem efficient 
+    // unused values as z
     let xtf_file_headers: Vec<(&str, &str, usize)> = vec![
         ("FileFormat", "b", 0), // bytes as num
         ("SystemType", "b", 1), // byte as num
@@ -29,8 +31,8 @@ fn main() {
         ("Reserved1", "b", 175),
         ("Reserved2", "b", 176),
         ("ReferencePointHeight", "b", 178),
-        ("ProjectionType", "12b", 182),  // Not currently used set to zero
-        ("SpheriodType", "10b", 194),   // Not currently used set to zero
+        ("ProjectionType", "12z", 182),  // Not currently used set to zero
+        ("SpheriodType", "10z", 194),   // Not currently used set to zero
         ("NavigationLatency", "H", 204), //was 2H
         ("OriginY", "f", 208),
         ("OriginX", "f", 212),
@@ -47,7 +49,7 @@ fn main() {
     ];
 
     let xtf_chan_info: Vec<(&str, &str, usize)> = vec![
-        ("TypeOfChannel", "B", 0),
+        ("TypeOfChannel", "b", 0),
         ("SubChannelNumber", "b", 1),
         ("CorrectionFlags", "H", 2),
         ("UniPolar", "H", 4),
@@ -207,105 +209,29 @@ fn main() {
             None => println!("Key: {}, Value: None", key),
         }
     }
+    println!("\nFinal byte {}", final_byte);
 
-    println!("Final byte: {}", final_byte);
+    //Iterate over Chan Headers
+    let (channel_headers_map, final_byte) = read_headers(xtf_chan_info, &data, final_byte);
 
-    // Iterate over ChanHeaders - change to get number of channels from file_headers and iterate over
-    //read_headers(xtf_chan_info, &data, file_header_length); // first chan
-    //read_headers(xtf_chan_info, &data, file_header_length); // second chan
+    for (key, value) in &channel_headers_map {
+        match value {
+            Some(val) => println!("Key: {}, Value: {:?}", key, val),
+            None => println!("Key: {}, Value: None", key),
+        }
+    }
 
-    // start ping headers - iterate over func to read ping headers then ping channel headers
     
 }
 
-// fn read_headers (file_header: Vec<(&str, &str, usize)>, data: &Vec<u8>, base_offset: usize){
 
-//     let mut final_byte = base_offset;
-
-//     for (name, fmt, offset) in &file_header {
-//         println!("Name: {}, Fmt: {}, Offset: {}", name, fmt, offset);
-
-//         let mut in_loop_fmt = fmt.to_string();
-//         let mut offset_plus_base = base_offset + offset;
-
-//         // if is char split into number and type 
-//         let mut number = 0;
-//         if fmt.contains("s") {
-//             let (parsed_number, char_type) = match parse_size_and_type(fmt) {
-//                 Ok((number, char_type)) => {
-//                     println!("Captured: Number = {}, Char = {}", number, char_type);
-//                     (number, char_type) // Return the values as a tuple
-//                 }
-//                 Err(e) => {
-//                     eprintln!("Error: {}", e);
-//                     return; // Early return to exit if there's an error
-//                 }
-//             };
-        
-//             // Update the outer number only if parsed_number is valid
-//             number = parsed_number; // Only update number here, it's already valid
-//             in_loop_fmt = char_type.to_string();
-//             //println!("\nParsed number: {}, Parsed string: {}", number, in_loop_fmt);
+// fn print_headers(file_headers_map: &HashMap<String, Option<Box<dyn Debug>>>) {
+//     for (key, value) in file_headers_map {
+//         match value {
+//             Some(val) => println!("Key: {}, Value: {:?}", key, val),  // `val` is a Box<dyn Debug>, so `{:?}` will work
+//             None => println!("Key: {}, Value: None", key),
 //         }
-
-//     let result = match in_loop_fmt.as_str() {
-//         "b" => {
-//             let byte_value = match read_and_decode_byte_as_number_u8(&data, offset_plus_base) {
-//                 Ok(byte_value) => {
-//                     println!("Byte value: {}", byte_value); // Print the decoded byte value
-//                 }
-//                 Err(e) => {
-//                     eprintln!("Error: {}", e); // Print the error if the function returns an Err
-//                 }
-//             };
-//             Some(byte_value)
-//             },
-
-//         "f" => {
-//             let float_value = match read_float_from_binary_at_offset(&data, offset_plus_base) {
-//                 Ok(float_value) => {
-//                     println!("Float value: {}", float_value); // Print the decoded byte value
-//                 }
-//                 Err(e) => {
-//                     eprintln!("Error: {}", e); // Print the error if the function returns an Err
-//                 }
-//             };
-//             Some(float_value)
-//         },
-//         "s" => {
-//             let string_value = match read_and_decode_bytes_as_string(&data, offset_plus_base, number) {
-//                 Ok(string_value) => {
-//                     println!("String value: {}", string_value); // Print the decoded string value
-//                 }
-//                 Err(e) => {
-//                     eprintln!("Error: {}", e); // Print the error if the function returns an Err
-//                 }
-//             };
-//             Some(string_value) // Wrap the string_value in Some and return
-//         },
-//         "H" => {
-//             let short_value = match read_unsigned_short(&data, offset_plus_base) {
-//                 Ok(short_value) => {
-//                     println!("Short value: {}", short_value); // Print the decoded byte value
-//                 }
-//                 Err(e) => {
-//                     eprintln!("Error: {}", e); // Print the error if the function returns an Err
-//                 }
-//             };
-//             Some(short_value) 
-//         },
-
-//         _ => {
-//             println!("Unknown value type: {}", fmt);
-//             None
-//         },
-//     };
-
-//     final_byte += offset;
 //     }
-
-//     println!("\nFinal byte {}", final_byte);
-//     //(final_byte)
 // }
 
 
@@ -317,31 +243,41 @@ fn read_headers(
 
     let mut final_byte = base_offset;
     let mut result_map: HashMap<String, Option<Box<dyn std::fmt::Debug>>> = HashMap::new();
+    let mut latest_offset_plus_base = 0;
+    let mut last_in_loop_fmt = String::new();
+    let mut last_number = 0;
 
     for (name, fmt, offset) in &file_header {
        // println!("Name: {}, Fmt: {}, Offset: {}", name, fmt, offset);
 
         let mut in_loop_fmt = fmt.to_string();
         let mut offset_plus_base = base_offset + offset;
+        latest_offset_plus_base = offset_plus_base;
+        last_in_loop_fmt = in_loop_fmt.clone();
 
-        // if fmt is char, split into number and type 
+        //println!{"Offset plus base: {}", offset_plus_base} //I think it is adding it all every it
+
+        // if fmt is char or multi byte, split into number and type 
         let mut number = 0;
-        if fmt.contains("s") {  //|| fmt.contains("b") 
+
+        if contains_number_and_z_or_s(fmt) {
             let (parsed_number, char_type) = match parse_size_and_type(fmt) {
-                Ok((number, char_type)) => {
-                    println!("Captured: Number = {}, Char = {}", number, char_type);
-                    (number, char_type) // Return the values as a tuple
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    return (result_map, final_byte); // Early return if there's an error //TODO: change to raise error
-                }
-            };
-        
-            // Update the outer number only if parsed_number is valid
-            number = parsed_number; // Only update number here, it's already valid
-            in_loop_fmt = char_type.to_string();
+                        Ok((number, char_type)) => {
+                            println!("Captured: Number = {}, Char = {}", number, char_type);
+                            (number, char_type) // Return the values as a tuple
+                        }
+                        Err(e) => {
+                            eprintln!("Error: {}", e);
+                            return (result_map, final_byte); // Early return if there's an error //TODO: change to raise error
+                        }
+                    };
+                
+                    // Update the outer number only if parsed_number is valid
+                    number = parsed_number; // Only update number here, it's already valid
+                    in_loop_fmt = char_type.to_string();
         }
+
+        last_number = number;
 
         let result = match in_loop_fmt.as_str() {
             "b" => {
@@ -400,6 +336,15 @@ fn read_headers(
                 short_value.map(|v| Box::new(v) as Box<dyn std::fmt::Debug>)
             },
 
+            "z" => {
+                let x = 0;
+
+                // Convert the integer into Option<Box<dyn Debug>>
+                let boxed_value: Option<Box<dyn Debug>> = Some(Box::new(x) as Box<dyn Debug>);
+                boxed_value //return
+
+            }
+
             _ => {
                 println!("Unknown value type: {}", fmt);
                 None
@@ -410,14 +355,30 @@ fn read_headers(
         result_map.insert(name.to_string(), result);
 
         // Update the final_byte after processing each header
-        final_byte += offset;
+        
     }
+    // final byte = base offset + last offset + size of last 
 
-    println!("\nFinal byte {}", final_byte);
+    let last_format_size = match last_in_loop_fmt.as_str() {
+        "b" => 1,
+        "f" => 4,
+        "s" => last_number,
+        "H" => 2,
+        "z" => last_number,
+        _ => {
+            println!("Unknown value type: {}", last_in_loop_fmt.as_str());
+            0  // You should return a valid number in the default case, or consider handling the error differently.
+        }
+    };
+
+    let final_byte = latest_offset_plus_base + last_format_size;
+
     (result_map, final_byte) // Return the map
 }
 
-
+fn contains_number_and_z_or_s(s: &str) -> bool {
+    Regex::new(r"^\d{1,2}[zs]$").unwrap().is_match(s)
+}
 
 fn read_binary_data(filename: &str) -> io::Result<Vec<u8>> {
     // Open the file in read-only mode
@@ -554,5 +515,4 @@ fn parse_size_and_type(input: &str) -> Result<(usize, char), Box<dyn Error>> {
 }
 
 // Make it so can choose Endian-ness but defaults to littler
-// Deal with fmt like 12b
-// work out why num bytes is wrong
+// Work out why 53s not working
