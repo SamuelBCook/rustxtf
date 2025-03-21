@@ -54,7 +54,7 @@ fn main() {
         ("CorrectionFlags", "H", 2),
         ("UniPolar", "H", 4),
         ("BytesPerSample", "H", 6),
-        ("Reserved", "i", 8),
+        ("Reserved", "H", 8), // was i
         ("ChannelName", "16s", 12),
         ("VoltScale", "f", 28),
         ("Frequency", "f", 32),
@@ -69,7 +69,7 @@ fn main() {
         ("OffsetRoll", "f", 68),
         ("BeamsPerArray", "H", 72),
         ("SampleFormat", "b", 74),
-        ("ReservedArea2", "53s", 75),
+        ("ReservedArea2", "53z", 75), // Not currently used set to zero
     ];
 
     let xtf_ping_header: Vec<(&str, &str, usize)> = vec![
@@ -182,7 +182,8 @@ fn main() {
     ];
 
     // Read Binary Data
-    let filename = "/Users/dev/Documents/sss_data/processed_raw_pair/GV_M_ECC_S0_GP_003H.xtf";
+    //let filename = "/Users/dev/Documents/sss_data/processed_raw_pair/GV_M_ECC_S0_GP_003H.xtf";
+    let filename = "/home/samuel/git/rovco/mbes_processing_tools/local_test/input/GP22_152_NLP_GS_GEOP_0011.001H.xtf";
     let mut data: Vec<u8> = Vec::new(); // initialise here so do not get possibly-uninitialised error
 
 
@@ -212,6 +213,16 @@ fn main() {
     println!("\nFinal byte {}", final_byte);
 
     //Iterate over Chan Headers
+    let mut number_of_channels = file_headers_map.get("NumberOfSonarChannels").unwrap().as_ref();
+    let mut number_of_channels = match number_of_channels {
+        Some(val) => val,
+        None => {
+            eprintln!("Error: Number of channels not found");
+            return;
+        }
+    };
+    println!("Number of channels: {:?}", number_of_channels);
+
     let (channel_headers_map, final_byte) = read_headers(xtf_chan_info, &data, final_byte);
 
     for (key, value) in &channel_headers_map {
@@ -262,19 +273,17 @@ fn read_headers(
 
         if contains_number_and_z_or_s(fmt) {
             let (parsed_number, char_type) = match parse_size_and_type(fmt) {
-                        Ok((number, char_type)) => {
-                            println!("Captured: Number = {}, Char = {}", number, char_type);
-                            (number, char_type) // Return the values as a tuple
-                        }
-                        Err(e) => {
-                            eprintln!("Error: {}", e);
-                            return (result_map, final_byte); // Early return if there's an error //TODO: change to raise error
-                        }
-                    };
-                
-                    // Update the outer number only if parsed_number is valid
-                    number = parsed_number; // Only update number here, it's already valid
-                    in_loop_fmt = char_type.to_string();
+                Ok((number, char_type)) => {
+                    (number, char_type)
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    return (result_map, final_byte);
+                }
+            };
+
+            number = parsed_number;
+            in_loop_fmt = char_type.to_string();
         }
 
         last_number = number;
@@ -375,6 +384,8 @@ fn read_headers(
 
     (result_map, final_byte) // Return the map
 }
+
+
 
 fn contains_number_and_z_or_s(s: &str) -> bool {
     Regex::new(r"^\d{1,2}[zs]$").unwrap().is_match(s)
