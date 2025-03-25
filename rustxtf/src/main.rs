@@ -182,8 +182,8 @@ fn main() {
     ];
 
     // Read Binary Data
-    //let filename = "/Users/dev/Documents/sss_data/processed_raw_pair/GV_M_ECC_S0_GP_003H.xtf";
-    let filename = "/home/samuel/git/rovco/mbes_processing_tools/local_test/input/GP22_152_NLP_GS_GEOP_0011.001H.xtf";
+    let filename = "/Users/dev/Documents/sss_data/processed_raw_pair/GV_M_ECC_S0_GP_003H.xtf";
+    //let filename = "/home/samuel/git/rovco/mbes_processing_tools/local_test/input/GP22_152_NLP_GS_GEOP_0011.001H.xtf";
     let mut data: Vec<u8> = Vec::new(); // initialise here so do not get possibly-uninitialised error
 
 
@@ -197,9 +197,9 @@ fn main() {
     }
 
     // header starts and lengths
-    let file_header_length = 254;
-    let chan_header_length = 256; 
-    let file_chan_header_length = 1024;
+    // let file_header_length = 254;
+    // let chan_header_length = 256; 
+    // let file_chan_header_length = 1024;
 
     // Iterate over FileHeaders
     let (file_headers_map, final_byte) = read_headers(xtf_file_headers, &data, 0);
@@ -210,40 +210,70 @@ fn main() {
             None => println!("Key: {}, Value: None", key),
         }
     }
-    println!("\nFinal byte {}", final_byte);
+    println!("\nFinal byte file headers {} \n", final_byte);
 
     //Iterate over Chan Headers
-    let mut number_of_channels = file_headers_map.get("NumberOfSonarChannels").unwrap().as_ref();
-    let mut number_of_channels = match number_of_channels {
-        Some(val) => val,
-        None => {
-            eprintln!("Error: Number of channels not found");
-            return;
-        }
-    };
-    println!("Number of channels: {:?}", number_of_channels);
+    // let mut number_of_channels = file_headers_map.get("NumberOfSonarChannels").unwrap().as_ref();
+    // let mut number_of_channels = match number_of_channels {
+    //     Some(val) => val,
+    //     None => {
+    //         eprintln!("Error: Number of channels not found");
+    //         return;
+    //     }
+    // };
+    // Check the value and downcast it to an integer
+    // let mut number_of_channels = match number_of_channels {
+    //     Some(val) => {
+    //         // Try to downcast to a concrete type, e.g., i32
+    //         match val.downcast_ref::<i32>() {
+    //             Some(&val) => val, // Successfully downcasted
+    //             None => {
+    //                 eprintln!("Error: Expected an integer value for NumberOfSonarChannels");
+    //                 return; // Return or handle error
+    //             }
+    //         }
+    //     },
+    //     None => {
+    //         eprintln!("Error: Number of channels not found");
+    //         return; // Return or handle error
+    //     }
+    // };
+    // println!("Number of channels: {:?}", number_of_channels);
 
-    let (channel_headers_map, final_byte) = read_headers(xtf_chan_info, &data, final_byte);
+    // // set up var to hold channel headers
+    // let mut chan_headers_vec: Vec<HashMap<String, Option<Box<dyn std::fmt::Debug>>>> = Vec::new();
 
-    for (key, value) in &channel_headers_map {
-        match value {
-            Some(val) => println!("Key: {}, Value: {:?}", key, val),
-            None => println!("Key: {}, Value: None", key),
-        }
+    // for i in 0..number_of_channels {
+    //     // Here, `i` will range from 0 to number_of_channels - 1
+    //     println!("Reading channel {}", i);
+
+    //     let (channel_headers_map, final_byte) = read_headers(xtf_chan_info, &data, final_byte);
+
+    //     for (key, value) in &channel_headers_map {
+    //         match value {
+    //             Some(val) => println!("Key: {}, Value: {:?}", key, val),
+    //             None => println!("Key: {}, Value: None", key),
+    //         }
+    //     }
+
+    //     chan_headers_vec.push(channel_headers_map);
+
     }
+
+    
 
     
 }
 
 
-// fn print_headers(file_headers_map: &HashMap<String, Option<Box<dyn Debug>>>) {
-//     for (key, value) in file_headers_map {
-//         match value {
-//             Some(val) => println!("Key: {}, Value: {:?}", key, val),  // `val` is a Box<dyn Debug>, so `{:?}` will work
-//             None => println!("Key: {}, Value: None", key),
-//         }
-//     }
-// }
+#[derive(Debug)]
+enum HeaderValue {
+    Byte(u8),
+    Float(f32),
+    String(String),
+    Short(u16),
+    Int(i32), // You can add more types as needed
+}
 
 
 fn read_headers(
@@ -264,8 +294,7 @@ fn read_headers(
         let mut in_loop_fmt = fmt.to_string();
         let mut offset_plus_base = base_offset + offset;
         latest_offset_plus_base = offset_plus_base;
-        last_in_loop_fmt = in_loop_fmt.clone();
-
+    
         //println!{"Offset plus base: {}", offset_plus_base} //I think it is adding it all every it
 
         // if fmt is char or multi byte, split into number and type 
@@ -287,6 +316,7 @@ fn read_headers(
         }
 
         last_number = number;
+        last_in_loop_fmt = in_loop_fmt.clone();
 
         let result = match in_loop_fmt.as_str() {
             "b" => {
@@ -387,9 +417,117 @@ fn read_headers(
 
 
 
+
+// fn read_headers(
+//     file_header: Vec<(&str, &str, usize)>, 
+//     data: &Vec<u8>, 
+//     base_offset: usize
+// ) -> (HashMap<String, Option<HeaderValue>>, usize) {
+
+//     let mut final_byte = base_offset;
+//     let mut result_map: HashMap<String, Option<HeaderValue>> = HashMap::new();
+//     let mut latest_offset_plus_base = 0;
+//     let mut last_in_loop_fmt = String::new();
+//     let mut last_number = 0;
+
+//     // Helper function to read and box values
+//     fn read_and_box<F, T>(
+//         fmt: &str,
+//         offset: usize,
+//         read_fn: F,
+//     ) -> Option<HeaderValue>
+//     where
+//         F: Fn(usize) -> Result<T, String>,
+//         T: 'static + std::fmt::Debug,
+//     {
+//         match read_fn(offset) {
+//             Ok(value) => {
+//                 // Determine type based on the format
+//                 match fmt {
+//                     "b" => Some(HeaderValue::Byte(value as u8)),
+//                     "f" => Some(HeaderValue::Float(value as f32)),
+//                     "s" => Some(HeaderValue::String(value.to_string())),
+//                     "H" => Some(HeaderValue::Short(value as u16)),
+//                     "z" => Some(HeaderValue::Int(value as i32)),
+//                     _ => None,
+//                 }
+//             },
+//             Err(e) => {
+//                 eprintln!("Error reading '{}': {}", fmt, e);
+//                 None
+//             }
+//         }
+//     }
+
+//     // Iterate over each header and process the data
+//     for (name, fmt, offset) in &file_header {
+//         let mut in_loop_fmt = fmt.to_string();
+//         let mut offset_plus_base = base_offset + offset;
+//         latest_offset_plus_base = offset_plus_base;
+
+//         // If format contains a number and 'z' or 's', split into number and type
+//         let mut number = 0;
+//         if contains_number_and_z_or_s(fmt) {
+//             let (parsed_number, char_type) = match parse_size_and_type(fmt) {
+//                 Ok((number, char_type)) => (number, char_type),
+//                 Err(e) => {
+//                     eprintln!("Error: {}", e);
+//                     return (result_map, final_byte);
+//                 }
+//             };
+//             number = parsed_number;
+//             in_loop_fmt = char_type.to_string();
+//         }
+
+//         last_number = number;
+//         last_in_loop_fmt = in_loop_fmt.clone();
+
+//         // Use a match for format types and call appropriate read functions
+//         let result = match in_loop_fmt.as_str() {
+//             "b" => read_and_box("b", offset_plus_base, read_and_decode_byte_as_number_u8),
+//             "f" => read_and_box("f", offset_plus_base, read_float_from_binary_at_offset),
+//             "s" => read_and_box("s", offset_plus_base, |offset| {
+//                 read_and_decode_bytes_as_string(data, offset, number)
+//             }),
+//             "H" => read_and_box("H", offset_plus_base, read_unsigned_short),
+//             "z" => {
+//                 let x = 0;
+//                 Some(HeaderValue::Int(x)) // Special case for 'z'
+//             }
+//             _ => {
+//                 println!("Unknown value type: {}", fmt);
+//                 None
+//             }
+//         };
+
+//         // Insert the result into the map
+//         result_map.insert(name.to_string(), result);
+//     }
+
+//     // Calculate the final byte position based on the last format type
+//     let last_format_size = match last_in_loop_fmt.as_str() {
+//         "b" => 1,
+//         "f" => 4,
+//         "s" => last_number,
+//         "H" => 2,
+//         "z" => last_number,
+//         _ => {
+//             println!("Unknown value type: {}", last_in_loop_fmt);
+//             0
+//         }
+//     };
+
+//     final_byte = latest_offset_plus_base + last_format_size;
+
+//     (result_map, final_byte)
+// }
+
+
+
 fn contains_number_and_z_or_s(s: &str) -> bool {
     Regex::new(r"^\d{1,2}[zs]$").unwrap().is_match(s)
 }
+
 
 fn read_binary_data(filename: &str) -> io::Result<Vec<u8>> {
     // Open the file in read-only mode
@@ -526,4 +664,4 @@ fn parse_size_and_type(input: &str) -> Result<(usize, char), Box<dyn Error>> {
 }
 
 // Make it so can choose Endian-ness but defaults to littler
-// Work out why 53s not working
+// Instead of returning debug trait thing make an enum with different types and use that
