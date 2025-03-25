@@ -260,11 +260,7 @@ fn main() {
 
     }
 
-    
-
-    
-}
-
+// Experimental READ here
 
 #[derive(Debug)]
 enum HeaderValue {
@@ -272,32 +268,26 @@ enum HeaderValue {
     Float(f32),
     String(String),
     Short(u16),
-    Int(i32), // You can add more types as needed
+    Int(i32),
 }
 
-
 fn read_headers(
-    file_header: Vec<(&str, &str, usize)>, 
-    data: &Vec<u8>, 
-    base_offset: usize
-) -> (HashMap<String, Option<Box<dyn std::fmt::Debug>>>, usize) {
+    file_header: Vec<(&str, &str, usize)>,
+    data: &Vec<u8>,
+    base_offset: usize,
+) -> (HashMap<String, Option<HeaderValue>>, usize) {
 
     let mut final_byte = base_offset;
-    let mut result_map: HashMap<String, Option<Box<dyn std::fmt::Debug>>> = HashMap::new();
+    let mut result_map: HashMap<String, Option<HeaderValue>> = HashMap::new();
     let mut latest_offset_plus_base = 0;
     let mut last_in_loop_fmt = String::new();
     let mut last_number = 0;
 
     for (name, fmt, offset) in &file_header {
-       // println!("Name: {}, Fmt: {}, Offset: {}", name, fmt, offset);
-
         let mut in_loop_fmt = fmt.to_string();
         let mut offset_plus_base = base_offset + offset;
         latest_offset_plus_base = offset_plus_base;
-    
-        //println!{"Offset plus base: {}", offset_plus_base} //I think it is adding it all every it
 
-        // if fmt is char or multi byte, split into number and type 
         let mut number = 0;
 
         if contains_number_and_z_or_s(fmt) {
@@ -321,68 +311,52 @@ fn read_headers(
         let result = match in_loop_fmt.as_str() {
             "b" => {
                 let byte_value = match read_and_decode_byte_as_number_u8(&data, offset_plus_base) {
-                    Ok(byte_value) => {
-                        //println!("Byte value: {}", byte_value); // Print the decoded byte value
-                        Some(byte_value)
-                    }
+                    Ok(byte_value) => Some(HeaderValue::Byte(byte_value)),
                     Err(e) => {
-                        //eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        eprintln!("Error: {}", e);
                         None
                     }
                 };
-                byte_value.map(|v| Box::new(v) as Box<dyn std::fmt::Debug>)
+                byte_value
             },
 
             "f" => {
                 let float_value = match read_float_from_binary_at_offset(&data, offset_plus_base) {
-                    Ok(float_value) => {
-                        //println!("Float value: {}", float_value); // Print the decoded byte value
-                        Some(float_value)
-                    }
+                    Ok(float_value) => Some(HeaderValue::Float(float_value)),
                     Err(e) => {
-                        //eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        eprintln!("Error: {}", e);
                         None
                     }
                 };
-                float_value.map(|v| Box::new(v) as Box<dyn std::fmt::Debug>)
+                float_value
             },
 
             "s" => {
                 let string_value = match read_and_decode_bytes_as_string(&data, offset_plus_base, number) {
-                    Ok(string_value) => {
-                        //println!("String value: {}", string_value); // Print the decoded string value
-                        Some(string_value)
-                    }
+                    Ok(string_value) => Some(HeaderValue::String(string_value)),
                     Err(e) => {
-                        //eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        eprintln!("Error: {}", e);
                         None
                     }
                 };
-                string_value.map(|v| Box::new(v) as Box<dyn std::fmt::Debug>)
+                string_value
             },
 
             "H" => {
                 let short_value = match read_unsigned_short(&data, offset_plus_base) {
-                    Ok(short_value) => {
-                        //println!("Short value: {}", short_value); // Print the decoded byte value
-                        Some(short_value)
-                    }
+                    Ok(short_value) => Some(HeaderValue::Short(short_value)),
                     Err(e) => {
-                        //eprintln!("Error: {}", e); // Print the error if the function returns an Err
+                        eprintln!("Error: {}", e);
                         None
                     }
                 };
-                short_value.map(|v| Box::new(v) as Box<dyn std::fmt::Debug>)
+                short_value
             },
 
             "z" => {
                 let x = 0;
-
-                // Convert the integer into Option<Box<dyn Debug>>
-                let boxed_value: Option<Box<dyn Debug>> = Some(Box::new(x) as Box<dyn Debug>);
-                boxed_value //return
-
-            }
+                Some(HeaderValue::Int(x))
+            },
 
             _ => {
                 println!("Unknown value type: {}", fmt);
@@ -390,137 +364,26 @@ fn read_headers(
             },
         };
 
-        // Insert the result into the map
         result_map.insert(name.to_string(), result);
 
-        // Update the final_byte after processing each header
-        
+        let last_format_size = match last_in_loop_fmt.as_str() {
+            "b" => 1,
+            "f" => 4,
+            "s" => last_number,
+            "H" => 2,
+            "z" => last_number,
+            _ => {
+                println!("Unknown value type: {}", last_in_loop_fmt.as_str());
+                0  // Default size in case of unknown type
+            }
+        };
+
+        final_byte = latest_offset_plus_base + last_format_size;
     }
-    // final byte = base offset + last offset + size of last 
 
-    let last_format_size = match last_in_loop_fmt.as_str() {
-        "b" => 1,
-        "f" => 4,
-        "s" => last_number,
-        "H" => 2,
-        "z" => last_number,
-        _ => {
-            println!("Unknown value type: {}", last_in_loop_fmt.as_str());
-            0  // You should return a valid number in the default case, or consider handling the error differently.
-        }
-    };
-
-    let final_byte = latest_offset_plus_base + last_format_size;
-
-    (result_map, final_byte) // Return the map
+    (result_map, final_byte)
 }
 
-
-
-
-// fn read_headers(
-//     file_header: Vec<(&str, &str, usize)>, 
-//     data: &Vec<u8>, 
-//     base_offset: usize
-// ) -> (HashMap<String, Option<HeaderValue>>, usize) {
-
-//     let mut final_byte = base_offset;
-//     let mut result_map: HashMap<String, Option<HeaderValue>> = HashMap::new();
-//     let mut latest_offset_plus_base = 0;
-//     let mut last_in_loop_fmt = String::new();
-//     let mut last_number = 0;
-
-//     // Helper function to read and box values
-//     fn read_and_box<F, T>(
-//         fmt: &str,
-//         offset: usize,
-//         read_fn: F,
-//     ) -> Option<HeaderValue>
-//     where
-//         F: Fn(usize) -> Result<T, String>,
-//         T: 'static + std::fmt::Debug,
-//     {
-//         match read_fn(offset) {
-//             Ok(value) => {
-//                 // Determine type based on the format
-//                 match fmt {
-//                     "b" => Some(HeaderValue::Byte(value as u8)),
-//                     "f" => Some(HeaderValue::Float(value as f32)),
-//                     "s" => Some(HeaderValue::String(value.to_string())),
-//                     "H" => Some(HeaderValue::Short(value as u16)),
-//                     "z" => Some(HeaderValue::Int(value as i32)),
-//                     _ => None,
-//                 }
-//             },
-//             Err(e) => {
-//                 eprintln!("Error reading '{}': {}", fmt, e);
-//                 None
-//             }
-//         }
-//     }
-
-//     // Iterate over each header and process the data
-//     for (name, fmt, offset) in &file_header {
-//         let mut in_loop_fmt = fmt.to_string();
-//         let mut offset_plus_base = base_offset + offset;
-//         latest_offset_plus_base = offset_plus_base;
-
-//         // If format contains a number and 'z' or 's', split into number and type
-//         let mut number = 0;
-//         if contains_number_and_z_or_s(fmt) {
-//             let (parsed_number, char_type) = match parse_size_and_type(fmt) {
-//                 Ok((number, char_type)) => (number, char_type),
-//                 Err(e) => {
-//                     eprintln!("Error: {}", e);
-//                     return (result_map, final_byte);
-//                 }
-//             };
-//             number = parsed_number;
-//             in_loop_fmt = char_type.to_string();
-//         }
-
-//         last_number = number;
-//         last_in_loop_fmt = in_loop_fmt.clone();
-
-//         // Use a match for format types and call appropriate read functions
-//         let result = match in_loop_fmt.as_str() {
-//             "b" => read_and_box("b", offset_plus_base, read_and_decode_byte_as_number_u8),
-//             "f" => read_and_box("f", offset_plus_base, read_float_from_binary_at_offset),
-//             "s" => read_and_box("s", offset_plus_base, |offset| {
-//                 read_and_decode_bytes_as_string(data, offset, number)
-//             }),
-//             "H" => read_and_box("H", offset_plus_base, read_unsigned_short),
-//             "z" => {
-//                 let x = 0;
-//                 Some(HeaderValue::Int(x)) // Special case for 'z'
-//             }
-//             _ => {
-//                 println!("Unknown value type: {}", fmt);
-//                 None
-//             }
-//         };
-
-//         // Insert the result into the map
-//         result_map.insert(name.to_string(), result);
-//     }
-
-//     // Calculate the final byte position based on the last format type
-//     let last_format_size = match last_in_loop_fmt.as_str() {
-//         "b" => 1,
-//         "f" => 4,
-//         "s" => last_number,
-//         "H" => 2,
-//         "z" => last_number,
-//         _ => {
-//             println!("Unknown value type: {}", last_in_loop_fmt);
-//             0
-//         }
-//     };
-
-//     final_byte = latest_offset_plus_base + last_format_size;
-
-//     (result_map, final_byte)
-// }
 
 
 
