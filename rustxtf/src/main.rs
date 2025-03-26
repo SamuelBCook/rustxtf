@@ -12,6 +12,11 @@ fn main() {
     // &str is string slice instead of string 
     // &str is immutable and more mem efficient 
     // unused values as z
+    // header starts and lengths
+    // let file_header_length = 254;
+    // let chan_header_length = 256; 
+    // let file_chan_header_length = 1024;
+
     let xtf_file_headers: Vec<(&str, &str, usize)> = vec![
         ("FileFormat", "b", 0), // bytes as num
         ("SystemType", "b", 1), // byte as num
@@ -186,7 +191,6 @@ fn main() {
     //let filename = "/home/samuel/git/rovco/mbes_processing_tools/local_test/input/GP22_152_NLP_GS_GEOP_0011.001H.xtf";
     let mut data: Vec<u8> = Vec::new(); // initialise here so do not get possibly-uninitialised error
 
-
     match read_binary_data(filename) {
         Ok(d) => {
             data = d; // pass d out so remains in scope after match block
@@ -196,13 +200,8 @@ fn main() {
         Err(e) => eprintln!("Error reading file: {}", e),
     }
 
-    // header starts and lengths
-    // let file_header_length = 254;
-    // let chan_header_length = 256; 
-    // let file_chan_header_length = 1024;
-
     // Iterate over FileHeaders
-    let (file_headers_map, final_byte) = read_headers(xtf_file_headers, &data, 0);
+    let (file_headers_map, final_byte) = read_headers(&xtf_file_headers, &data, 0);
 
     for (key, value) in &file_headers_map {
         match value {
@@ -210,59 +209,48 @@ fn main() {
             None => println!("Key: {}, Value: None", key),
         }
     }
-    println!("\nFinal byte file headers {} \n", final_byte);
+    //println!("\nFinal byte file headers {} \n", final_byte);
 
     //Iterate over Chan Headers
-    // let mut number_of_channels = file_headers_map.get("NumberOfSonarChannels").unwrap().as_ref();
-    // let mut number_of_channels = match number_of_channels {
-    //     Some(val) => val,
-    //     None => {
-    //         eprintln!("Error: Number of channels not found");
-    //         return;
-    //     }
-    // };
-    // Check the value and downcast it to an integer
-    // let mut number_of_channels = match number_of_channels {
-    //     Some(val) => {
-    //         // Try to downcast to a concrete type, e.g., i32
-    //         match val.downcast_ref::<i32>() {
-    //             Some(&val) => val, // Successfully downcasted
-    //             None => {
-    //                 eprintln!("Error: Expected an integer value for NumberOfSonarChannels");
-    //                 return; // Return or handle error
-    //             }
-    //         }
-    //     },
-    //     None => {
-    //         eprintln!("Error: Number of channels not found");
-    //         return; // Return or handle error
-    //     }
-    // };
-    // println!("Number of channels: {:?}", number_of_channels);
+    let mut number_of_channels = file_headers_map.get("NumberOfSonarChannels");
+    let mut channels = 0;
+    // Unpack and print the value
+    if let Some(Some(HeaderValue::Short(val))) = number_of_channels {
+        //println!("Number of channels: {}", val); 
+        channels = *val;
+    } else {
+        println!("No valid value found for 'NumberOfSonarChannels'");
+    }
+    println!("Number of channels: {}", channels);
 
-    // // set up var to hold channel headers
-    // let mut chan_headers_vec: Vec<HashMap<String, Option<Box<dyn std::fmt::Debug>>>> = Vec::new();
+    // set up var to hold channel headers
+    let mut chan_headers_vec: Vec<HashMap<String, Option<HeaderValue>>> = Vec::new();
 
-    // for i in 0..number_of_channels {
-    //     // Here, `i` will range from 0 to number_of_channels - 1
-    //     println!("Reading channel {}", i);
+    for i in 0..channels {
+        // Here, `i` will range from 0 to number_of_channels - 1
+        println!("Reading channel {}", i);
 
-    //     let (channel_headers_map, final_byte) = read_headers(xtf_chan_info, &data, final_byte);
+        let (channel_headers_map, final_byte) = read_headers(&xtf_chan_info, &data, final_byte);
+        
+        for (key, value) in &channel_headers_map {
+            match value {
+                Some(val) => println!("Key: {}, Value: {:?}", key, val),
+                None => println!("Key: {}, Value: None", key),
+            }
+        }
+        println!("\n");
 
-    //     for (key, value) in &channel_headers_map {
-    //         match value {
-    //             Some(val) => println!("Key: {}, Value: {:?}", key, val),
-    //             None => println!("Key: {}, Value: None", key),
-    //         }
-    //     }
-
-    //     chan_headers_vec.push(channel_headers_map);
+        chan_headers_vec.push(channel_headers_map);
 
     }
 
-// Experimental READ here
+    // Get num pings or just find MagicNumber and keep going till no more?
 
-#[derive(Debug)]
+
+    }
+
+    
+#[derive(Debug)] // so can print with {:?}
 enum HeaderValue {
     Byte(u8),
     Float(f32),
@@ -272,7 +260,7 @@ enum HeaderValue {
 }
 
 fn read_headers(
-    file_header: Vec<(&str, &str, usize)>,
+    file_header: &Vec<(&str, &str, usize)>,
     data: &Vec<u8>,
     base_offset: usize,
 ) -> (HashMap<String, Option<HeaderValue>>, usize) {
@@ -283,7 +271,7 @@ fn read_headers(
     let mut last_in_loop_fmt = String::new();
     let mut last_number = 0;
 
-    for (name, fmt, offset) in &file_header {
+    for (name, fmt, offset) in file_header {
         let mut in_loop_fmt = fmt.to_string();
         let mut offset_plus_base = base_offset + offset;
         latest_offset_plus_base = offset_plus_base;
@@ -383,8 +371,6 @@ fn read_headers(
 
     (result_map, final_byte)
 }
-
-
 
 
 fn contains_number_and_z_or_s(s: &str) -> bool {
@@ -487,27 +473,6 @@ fn read_unsigned_short(data: &[u8], offset: usize) -> Result<u16, Box<dyn std::e
 }
 
 
-// // Generic function to read bytes from the given offset
-// fn read_bytes_from_binary(data: &[u8], offset: usize, num_bytes: &i32) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-//     // Ensure the offset and number of bytes are within bounds
-//     if offset + num_bytes > data.len() {
-//         return Err("Offset and number of bytes exceed data length".into());
-//     }
-
-//     // Create a cursor from the data, starting at the specified offset
-//     let mut cursor = Cursor::new(&data[offset..]);
-
-//     // Create a buffer to hold the bytes we want to read
-//     let mut buffer = vec![0; num_bytes];
-
-//     // Read the specified number of bytes into the buffer
-//     cursor.read_exact(&mut buffer)?;
-
-//     // Return the decoded bytes
-//     Ok(buffer)
-// }
-
-
 fn parse_size_and_type(input: &str) -> Result<(usize, char), Box<dyn Error>> {
     // Create a regular expression to match a number followed by a character
     let re = Regex::new(r"^(\d+)([a-zA-Z])$")?;
@@ -527,4 +492,4 @@ fn parse_size_and_type(input: &str) -> Result<(usize, char), Box<dyn Error>> {
 }
 
 // Make it so can choose Endian-ness but defaults to littler
-// Instead of returning debug trait thing make an enum with different types and use that
+// Pings next! 
