@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs;
 use std::io::{self, Read};
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::Cursor;
@@ -379,116 +379,59 @@ fn contains_number_and_z_or_s(s: &str) -> bool {
 
 
 fn read_binary_data(filename: &str) -> io::Result<Vec<u8>> {
-    // Open the file in read-only mode
-    let mut file = File::open(filename)?;
-
-    // Create a buffer to store the data
-    let mut buffer = Vec::new();
-
-    // Read the file content into the buffer
-    file.read_to_end(&mut buffer)?;
-
-    // Return the buffer containing the binary data
-    Ok(buffer)
+    fs::read(filename)
 }
 
 
 fn read_float_from_binary_at_offset(data: &[u8], offset: usize) -> Result<f32, Box<dyn Error>> {
-    // Check if the offset is within bounds of the data
-    if offset >= data.len() {
-        return Err("Offset exceeds data length".into());
+    if offset + 4 > data.len() {
+        return Err("Insufficient data to read f32".into());
     }
 
-    // Create a cursor to read from the binary data, starting at the given offset
-    let mut cursor = Cursor::new(&data[offset..]);
-
-    // Read the first 4 bytes from the offset and interpret them as a little-endian f32
-    let value = cursor.read_f32::<LittleEndian>()?;
-
-    // Return the float value
-    Ok(value)
+    let bytes: [u8; 4] = data[offset..offset + 4].try_into()?; // Try converting slice to array
+    Ok(f32::from_le_bytes(bytes))
 }
 
 
-fn read_and_decode_byte_as_number_u8(data: &[u8], offset:usize) -> Result<u8, Box<dyn std::error::Error>> {
-    // u8
-    // Ensure the offset is within bounds
-    if offset >= data.len() {
-        return Err("Offset exceeds data length".into());
-    }
-
-    // Create a cursor from the data, starting from the specified offset
-    let mut cursor = Cursor::new(&data[offset..]);
-
-    // Read a single byte from the cursor
-    let byte = cursor.read_u8()?;  // unsigned 8bit int?
-
-    // Return the byte value (this is already a numeric value)
-    Ok(byte)
+fn read_and_decode_byte_as_number_u8(data: &[u8], offset: usize) -> Result<u8, Box<dyn Error>> {
+    data.get(offset)
+        .copied()
+        .ok_or_else(|| "Offset exceeds data length".into())
 }
 
 
-fn read_and_decode_bytes_as_string(data: &[u8], offset: usize, num_bytes: usize) -> Result<String, Box<dyn std::error::Error>> {
-    // Ensure the offset and the number of bytes to read are within bounds
+fn read_and_decode_bytes_as_string(data: &[u8], offset: usize, num_bytes: usize) -> Result<String, Box<dyn Error>> {
     if offset + num_bytes > data.len() {
         return Err("Offset and number of bytes exceed data length".into());
     }
 
-    // Create a cursor from the data, starting at the specified offset
-    let mut cursor = Cursor::new(&data[offset..]);
+    let mut buffer = data[offset..offset + num_bytes].to_vec();
+    buffer.retain(|&b| b != 0x00); // Remove null padding
 
-    // Create a buffer to hold the bytes we want to read
-    let mut buffer = vec![0; num_bytes];
-
-    // Read the specified number of bytes into the buffer
-    cursor.read_exact(&mut buffer)?;
-
-    // Strip the padding bytes (assuming 0x00 is the padding byte)
-    buffer.retain(|&byte| byte != 0x00);
-
-
-    // Attempt to decode the bytes as a UTF-8 string
-    match String::from_utf8(buffer) {
-        Ok(decoded_string) => Ok(decoded_string),
-        Err(_) => Err("Failed to decode bytes as UTF-8".into()), // Handle invalid UTF-8
-    }
+    Ok(String::from_utf8(buffer)?)
 }
 
 
-fn read_unsigned_short(data: &[u8], offset: usize) -> Result<u16, Box<dyn std::error::Error>> {
-    // u16
-    // Ensure the offset is within bounds (at least 2 bytes for u16)
-    if offset + 1 >= data.len() {
-        return Err("Offset exceeds data length or insufficient bytes for u16".into());
+fn read_unsigned_short(data: &[u8], offset: usize) -> Result<u16, Box<dyn Error>> {
+    if offset + 2 > data.len() {
+        return Err("Insufficient data to read u16".into());
     }
 
-    // Create a cursor from the data, starting at the specified offset
-    let mut cursor = Cursor::new(&data[offset..]);
-
-    // Read a 16-bit unsigned short (u16) using LittleEndian byte order
-    let value = cursor.read_u16::<LittleEndian>()?;
-
-    // Return the decoded u16 value
-    Ok(value)
+    let bytes: [u8; 2] = data[offset..offset + 2].try_into()?; // Try converting slice to array
+    Ok(u16::from_le_bytes(bytes))
 }
 
 
 fn parse_size_and_type(input: &str) -> Result<(usize, char), Box<dyn Error>> {
-    // Create a regular expression to match a number followed by a character
     let re = Regex::new(r"^(\d+)([a-zA-Z])$")?;
 
-    // Try to capture the number and the character
-    if let Some(captures) = re.captures(input) {
-        // Get the number part and parse it to usize
-        let number: usize = captures[1].parse()?;
-
-        // Get the character part directly from captures[2]
-        let char_type: char = captures[2].chars().next().unwrap();
-
-        Ok((number, char_type))
-    } else {
-        Err("Invalid format".into())
-    }
+    re.captures(input)
+        .ok_or_else(|| "Invalid format".into())
+        .and_then(|caps| {
+            let number = caps.get(1).unwrap().as_str().parse::<usize>()?;
+            let char_type = caps.get(2).unwrap().as_str().chars().next().unwrap();
+            Ok((number, char_type))
+        })
 }
 
 // Make it so can choose Endian-ness but defaults to littler
