@@ -151,12 +151,12 @@ fn main() {
         ("ComputerClockMinute", "b", 237),
         ("ComputerClockSecond", "b", 238),
         ("ComputerClockHsec", "b", 239),
-        ("FishPositionDeltaX", "h", 240),
-        ("FishPositionDeltaY", "h", 242),
+        ("FishPositionDeltaX", "H", 240), // was h
+        ("FishPositionDeltaY", "H", 242), // was h
         ("FishPositionErrorCode", "b", 244),
         ("OptionalOffset", "2H", 245),
         ("CableOutHundredths", "b", 249),
-        ("ReservedSpace2", "6b", 250),
+        ("ReservedSpace2", "6z", 250), // Not current used set to zero
     ];
 
     let xtf_ping_chan_header: Vec<(&str, &str, usize)> = vec![
@@ -183,13 +183,14 @@ fn main() {
         ("Reserved2", "b", 53),
         ("FixedVSOP", "f", 54),
         ("Weight", "h", 58),
-        ("ReservedSpace", "4b", 60),
+        ("ReservedSpace", "4z", 60), // Not currently used set to zero
     ];
 
     // Read Binary Data
-    let filename = "/Users/dev/Documents/sss_data/processed_raw_pair/GV_M_ECC_S0_GP_003H.xtf";
-    //let filename = "/home/samuel/git/rovco/mbes_processing_tools/local_test/input/GP22_152_NLP_GS_GEOP_0011.001H.xtf";
+    //let filename = "/Users/dev/Documents/sss_data/processed_raw_pair/GV_M_ECC_S0_GP_003H.xtf";
+    let filename = "/home/samuel/demo/boulder-picking-demo/data/GP22_152_NLP_GS_GEOP_0011.001H.xtf";
     let mut data: Vec<u8> = Vec::new(); // initialise here so do not get possibly-uninitialised error
+    let mut final_byte = 0;
 
     match read_binary_data(filename) {
         Ok(d) => {
@@ -201,7 +202,8 @@ fn main() {
     }
 
     // Iterate over FileHeaders
-    let (file_headers_map, final_byte) = read_headers(&xtf_file_headers, &data, 0);
+    let (file_headers_map, headers_final_byte) = read_headers(&xtf_file_headers, &data, 0);
+    final_byte = headers_final_byte;
 
     for (key, value) in &file_headers_map {
         match value {
@@ -230,7 +232,8 @@ fn main() {
         // Here, `i` will range from 0 to number_of_channels - 1
         println!("Reading channel {}", i);
 
-        let (channel_headers_map, final_byte) = read_headers(&xtf_chan_info, &data, final_byte);
+        let (channel_headers_map, updated_final_byte) = read_headers(&xtf_chan_info, &data, final_byte);
+        final_byte = updated_final_byte;
         
         for (key, value) in &channel_headers_map {
             match value {
@@ -238,13 +241,53 @@ fn main() {
                 None => println!("Key: {}, Value: None", key),
             }
         }
-        println!("\n");
+        println!("Final byte {} \n", final_byte);
 
         chan_headers_vec.push(channel_headers_map);
 
     }
 
     // Get num pings or just find MagicNumber and keep going till no more?
+
+    // find next magic number
+    let magic_number: u16 = 64206;
+    let mut ping_header_start_byte = final_byte; // could start at zero updating immediatel
+
+
+    while let Some(next_ping_offset) = find_byte_offset_for_value(&data, ping_header_start_byte, magic_number) {
+        println!("Next ping offset: {}", next_ping_offset);
+
+        // TODO: add check that it is a ping header (HeaderType must be 0)
+
+        // Read Ping Headers
+        let (ping_headers_map, updated_final_byte) = read_headers(&xtf_ping_header, &data, next_ping_offset);
+        ping_header_start_byte = updated_final_byte; // not actual ping header start byte CHANGE
+
+        // Print Ping Headers
+        for (key, value) in &ping_headers_map {
+            match value {
+                Some(val) => println!("Key: {}, Value: {:?}", key, val),
+                None => println!("Key: {}, Value: None", key),
+            }
+        }
+
+
+        // get number of channels to follow TODO put this in func with same above
+        let mut number_of_channels_to_follow = ping_headers_map.get("NumChansToFollow");
+        let mut ping_header_channels = 0;
+        // Unpack and print the value
+        if let Some(Some(HeaderValue::Short(val))) = number_of_channels {
+            //println!("Number of channels: {}", val); 
+            ping_header_channels = *val;
+        } else {
+            println!("No valid value found for 'NumChansToFollow'");
+        }
+        println!("Number of channels: {}", ping_header_channels);
+
+        break // exit loop after first ping for now
+    }
+    
+    println!("No more pings found.");
 
 
     }
@@ -341,6 +384,28 @@ fn read_headers(
                 short_value
             },
 
+            "2H" => {
+                let long_value = match read_unsigned_long(&data, offset_plus_base) {
+                    Ok(long_value) => Some(HeaderValue::Int(long_value as i32)), // Convert to i32
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        None
+                    }
+                };
+                long_value
+            }
+
+            "d" => {
+                let double_value = match read_double(&data, offset_plus_base) {
+                    Ok(double_value) => Some(HeaderValue::Float(double_value as f32)), // Convert to f32
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        None
+                    }
+                };
+                double_value
+            },
+
             "z" => {
                 let x = 0;
                 Some(HeaderValue::Int(x))
@@ -359,6 +424,8 @@ fn read_headers(
             "f" => 4,
             "s" => last_number,
             "H" => 2,
+            "2H" => 4,
+            "d" => 8,
             "z" => last_number,
             _ => {
                 println!("Unknown value type: {}", last_in_loop_fmt.as_str());
@@ -422,6 +489,27 @@ fn read_unsigned_short(data: &[u8], offset: usize) -> Result<u16, Box<dyn Error>
 }
 
 
+fn read_unsigned_long(data: &[u8], offset: usize) -> Result<u32, Box<dyn Error>> {
+    // Used for reading 2H which is an unsigned short with twice the required bytes
+    if offset + 4 > data.len() {
+        return Err("Insufficient data to read u32".into());
+    }
+
+    let bytes: [u8; 4] = data[offset..offset + 4].try_into()?; // Try converting slice to array
+    Ok(u32::from_le_bytes(bytes))
+}
+
+
+fn read_double(data: &[u8], offset: usize) -> Result<f64, Box<dyn Error>> {
+    if offset + 8 > data.len() {
+        return Err("Insufficient data to read f64".into());
+    }
+
+    let bytes: [u8; 8] = data[offset..offset + 8].try_into()?; // Try converting slice to array
+    Ok(f64::from_le_bytes(bytes))
+}
+
+
 fn parse_size_and_type(input: &str) -> Result<(usize, char), Box<dyn Error>> {
     let re = Regex::new(r"^(\d+)([a-zA-Z])$")?;
 
@@ -432,6 +520,29 @@ fn parse_size_and_type(input: &str) -> Result<(usize, char), Box<dyn Error>> {
             let char_type = caps.get(2).unwrap().as_str().chars().next().unwrap();
             Ok((number, char_type))
         })
+}
+
+
+fn find_byte_offset_for_value(data: &Vec<u8>, base_offset: usize, target_value: u16) -> Option<usize> {
+    let mut offset = base_offset;
+
+    while offset + 1 < data.len() {
+        // Try to read the next two bytes as an unsigned short
+        match read_unsigned_short(data, offset) {
+            Ok(value) => {
+                if value == target_value {
+                    return Some(offset); // Return the offset if the value matches
+                }
+            }
+            Err(e) => {
+                eprintln!("Error reading unsigned short at offset {}: {}", offset, e);
+                break;
+            }
+        }
+        offset += 1; // Move to the next byte
+    }
+
+    None // Return None if the value is not found
 }
 
 // Make it so can choose Endian-ness but defaults to littler
