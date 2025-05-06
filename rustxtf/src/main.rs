@@ -285,30 +285,42 @@ fn main() {
         println!("Number of channels: {}", ping_header_channels);
 
 
-        // Read Ping Chan Headers
-        let mut ping_chan_headers_vec: Vec<HashMap<String, Option<HeaderValue>>> = Vec::new();
-        let mut channel_byte_offset = updated_final_byte;
-
-        for i in 0..ping_header_channels {
-            // Here, `i` will range from 0 to ping_header_channels - 1
-            println!("\nReading ping channel {}", i);
-    
-            let (channel_headers_map, updated_final_byte) = read_headers(&xtf_ping_chan_header, &data, channel_byte_offset);
-            channel_byte_offset = updated_final_byte;
-            
-            for (key, value) in &channel_headers_map {
-                match value {
-                    Some(val) => println!("Key: {}, Value: {:?}", key, val),
-                    None => println!("Key: {}, Value: None", key),
-                }
+        let (channel_headers_map, channel_final_byte) = read_headers(&xtf_ping_chan_header, &data, updated_final_byte);
+        //updated_final_byte = channel_final_byte;
+        
+        for (key, value) in &channel_headers_map {
+            match value {
+                Some(val) => println!("Key: {}, Value: {:?}", key, val),
+                None => println!("Key: {}, Value: None", key),
             }
-            println!("Final channel {} byte {} \n", i, updated_final_byte);
-    
-            ping_chan_headers_vec.push(channel_headers_map);
-
-            ping_header_start_byte = updated_final_byte; // not actual ping header start byte CHANGE
-    
         }
+
+        // Read Ping Chan Headers
+        // let mut ping_chan_headers_vec: Vec<HashMap<String, Option<HeaderValue>>> = Vec::new();
+        // let mut channel_byte_offset = updated_final_byte;
+        
+
+        // probs a looop issue try outside first
+        // for i in 0..ping_header_channels {
+        //     // Here, `i` will range from 0 to ping_header_channels - 1
+        //     println!("\nReading ping channel {}", i);
+    
+        //     let (channel_headers_map, updated_final_byte) = read_headers(&xtf_ping_chan_header, &data, channel_byte_offset);
+        //     channel_byte_offset = updated_final_byte;
+            
+        //     for (key, value) in &channel_headers_map {
+        //         match value {
+        //             Some(val) => println!("Key: {}, Value: {:?}", key, val),
+        //             None => println!("Key: {}, Value: None", key),
+        //         }
+        //     }
+        //     println!("Final channel {} byte {} \n", i, updated_final_byte);
+    
+        //     ping_chan_headers_vec.push(channel_headers_map);
+
+        //     ping_header_start_byte = updated_final_byte; // not actual ping header start byte CHANGE
+    
+        // }
 
         break // exit loop after first ping for now
     }
