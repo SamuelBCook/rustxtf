@@ -182,7 +182,7 @@ fn main() {
         ("ContactCloseNumber", "b", 52),
         ("Reserved2", "b", 53),
         ("FixedVSOP", "f", 54),
-        ("Weight", "h", 58),
+        ("Weight", "H", 58), //was h
         ("ReservedSpace", "4z", 60), // Not currently used set to zero
     ];
 
@@ -230,7 +230,7 @@ fn main() {
 
     for i in 0..channels {
         // Here, `i` will range from 0 to number_of_channels - 1
-        println!("Reading channel {}", i);
+        println!("\nReading channel {}", i);
 
         let (channel_headers_map, updated_final_byte) = read_headers(&xtf_chan_info, &data, final_byte);
         final_byte = updated_final_byte;
@@ -261,7 +261,7 @@ fn main() {
 
         // Read Ping Headers
         let (ping_headers_map, updated_final_byte) = read_headers(&xtf_ping_header, &data, next_ping_offset);
-        ping_header_start_byte = updated_final_byte; // not actual ping header start byte CHANGE
+        
 
         // Print Ping Headers
         for (key, value) in &ping_headers_map {
@@ -283,6 +283,32 @@ fn main() {
             println!("No valid value found for 'NumChansToFollow'");
         }
         println!("Number of channels: {}", ping_header_channels);
+
+
+        // Read Ping Chan Headers
+        let mut ping_chan_headers_vec: Vec<HashMap<String, Option<HeaderValue>>> = Vec::new();
+        let mut channel_byte_offset = updated_final_byte;
+
+        for i in 0..ping_header_channels {
+            // Here, `i` will range from 0 to ping_header_channels - 1
+            println!("\nReading ping channel {}", i);
+    
+            let (channel_headers_map, updated_final_byte) = read_headers(&xtf_ping_chan_header, &data, channel_byte_offset);
+            channel_byte_offset = updated_final_byte;
+            
+            for (key, value) in &channel_headers_map {
+                match value {
+                    Some(val) => println!("Key: {}, Value: {:?}", key, val),
+                    None => println!("Key: {}, Value: None", key),
+                }
+            }
+            println!("Final channel {} byte {} \n", i, updated_final_byte);
+    
+            ping_chan_headers_vec.push(channel_headers_map);
+
+            ping_header_start_byte = updated_final_byte; // not actual ping header start byte CHANGE
+    
+        }
 
         break // exit loop after first ping for now
     }
