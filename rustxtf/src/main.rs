@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, fmt};
 use std::io::{self, Read};
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::Cursor;
@@ -228,6 +228,7 @@ fn main() {
     // set up var to hold channel headers
     let mut chan_headers_vec: Vec<HashMap<String, Option<HeaderValue>>> = Vec::new();
 
+
     for i in 0..channels {
         // Here, `i` will range from 0 to number_of_channels - 1
         println!("\nReading channel {}", i);
@@ -246,6 +247,22 @@ fn main() {
         chan_headers_vec.push(channel_headers_map);
 
     }
+
+    // Get number of bytes in first channel headers
+    let mut bytes_per_sample: Option<HeaderValue> = None;
+
+    if let Some(first_map) = chan_headers_vec.get(0) {
+        if let Some(Some(value)) = first_map.get("BytesPerSample") {
+            println!("\nFound: {:?}\n", value);
+            bytes_per_sample = Some(value.clone()); // Assign the value to the variable
+        } else {
+            println!("Key not found or value is None");
+        }
+    } else {
+        println!("Vector is empty");
+    }
+
+    
 
     // Get num pings or just find MagicNumber and keep going till no more?
 
@@ -277,13 +294,16 @@ fn main() {
         let mut ping_header_channels = 0;
         // Unpack and print the value
         if let Some(Some(HeaderValue::Short(val))) = number_of_channels {
-            //println!("Number of channels: {}", val); 
-            ping_header_channels = *val;
+            println!("Number of channels: {}", val); 
+             ping_header_channels = *val;
         } else {
             println!("No valid value found for 'NumChansToFollow'");
         }
-        println!("Number of channels: {}", ping_header_channels);
+        println!("Number of channels: {}\n", ping_header_channels);
 
+        
+
+        // READ CHANNEL ONE
 
         let (channel_headers_map, channel_final_byte) = read_headers(&xtf_ping_chan_header, &data, updated_final_byte);
         //updated_final_byte = channel_final_byte;
@@ -294,6 +314,21 @@ fn main() {
                 None => println!("Key: {}, Value: None", key),
             }
         }
+
+        // Get number of samples
+
+        let mut number_of_samples = channel_headers_map.get("NumSamples");
+        let mut samples = 0;
+        // Unpack and print the value
+        if let Some(Some(HeaderValue::Short(val))) = number_of_samples {
+            //println!("Number of channels: {}", val); 
+            samples = *val;
+        } else {
+            println!("No valid value found for 'NumSamples'");
+        }
+        println!("Number of samples: {}", samples);
+
+        
 
         // Read Ping Chan Headers
         // let mut ping_chan_headers_vec: Vec<HashMap<String, Option<HeaderValue>>> = Vec::new();
@@ -331,13 +366,25 @@ fn main() {
     }
 
     
-#[derive(Debug)] // so can print with {:?}
+#[derive(Debug, Clone)] // so can print with {:?} and allow cloning values
 enum HeaderValue {
     Byte(u8),
     Float(f32),
     String(String),
     Short(u16),
     Int(i32),
+}
+
+impl fmt::Display for HeaderValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HeaderValue::Byte(val) => write!(f, "Byte: {}", val),
+            HeaderValue::Float(val) => write!(f, "Float: {}", val),
+            HeaderValue::String(val) => write!(f, "String: {}", val),
+            HeaderValue::Short(val) => write!(f, "Short: {}", val),
+            HeaderValue::Int(val) => write!(f, "Int: {}", val),
+        }
+    }
 }
 
 fn read_headers(
@@ -585,3 +632,6 @@ fn find_byte_offset_for_value(data: &Vec<u8>, base_offset: usize, target_value: 
 
 // Make it so can choose Endian-ness but defaults to littler
 // Pings next! 
+// extract bytes per sample for each channel from channel headers (not ping channel headers)
+// convert channel headers reading to a iterator based on number of channels 
+
